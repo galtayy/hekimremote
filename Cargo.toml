@@ -1,15 +1,15 @@
 [package]
-name = "rustdesk"
-version = "1.4.4"
-authors = ["rustdesk <info@rustdesk.com>"]
+name = "hekimremote"
+version = "1.0.0"
+authors = ["HekimRemote"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "HekimRemote Remote Desktop"
+default-run = "hekimremote"
 rust-version = "1.75"
 
 [lib]
-name = "librustdesk"
+name = "hekimremote"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
@@ -200,10 +200,10 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2025 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
-FileDescription = "RustDesk Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+LegalCopyright = "Copyright © 2025 HekimRemote. All rights reserved."
+ProductName = "HekimRemote"
+FileDescription = "HekimRemote Remote Desktop"
+OriginalFilename = "hekimremote.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -219,8 +219,8 @@ hound = "3.5"
 docopt = "1.1"
 
 [package.metadata.bundle]
-name = "RustDesk"
-identifier = "com.carriez.rustdesk"
+name = "HekimRemote"
+identifier = "com.hekim.remote"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 
