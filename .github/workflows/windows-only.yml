@@ -7,6 +7,7 @@ env:
   RUST_VERSION: "1.75"
   FLUTTER_VERSION: "3.24.5"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  LLVM_VERSION: "15.0.6"
   VERSION: "1.4.4"
 
 jobs:
@@ -18,10 +19,16 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -34,13 +41,24 @@ jobs:
         with:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-      - name: Install vcpkg dependencies
+      - name: Download Flutter custom engine
+        shell: pwsh
         run: |
-          vcpkg install --triplet x64-windows-static
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          mv -Force windows-x64-release/* C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        run: |
+          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
 
       - name: Build Rust library
+        shell: bash
         run: |
-          cargo build --release --features flutter
+          export VCPKG_ROOT="${{ env.VCPKG_INSTALLED_DIR }}/../"
+          cargo build --release --features flutter --target x86_64-pc-windows-msvc
 
       - name: Build Flutter Windows
         run: |
