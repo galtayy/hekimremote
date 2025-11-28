@@ -46,40 +46,108 @@ jobs:
       - name: Download Flutter custom engine
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "Running flutter precache..."
           flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
-          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
-          mv -Force windows-x64-release/* C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+
+          Write-Host "Downloading custom Flutter engine..."
+          $engineUrl = "https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip"
+          Invoke-WebRequest -Uri $engineUrl -OutFile windows-x64-release.zip -TimeoutSec 300
+
+          Write-Host "Extracting engine..."
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release -Force
+
+          # Find Flutter path
+          $flutterCmd = Get-Command flutter
+          $flutterRoot = Split-Path -Parent (Split-Path -Parent $flutterCmd.Source)
+          $enginePath = Join-Path $flutterRoot "bin\cache\artifacts\engine\windows-x64-release"
+
+          Write-Host "Flutter root: $flutterRoot"
+          Write-Host "Engine destination: $enginePath"
+
+          # Copy engine files
+          Copy-Item -Path "windows-x64-release\*" -Destination $enginePath -Recurse -Force
+
+          Write-Host "Custom engine installed successfully."
 
       - name: Install vcpkg dependencies
+        shell: pwsh
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
         run: |
-          if ! $VCPKG_ROOT/vcpkg \
-            install \
-            --triplet x64-windows-static \
-            --x-install-root="$VCPKG_ROOT/installed"; then
-            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
-              echo "$_1:"
-              echo "======"
-              cat "$_1"
-              echo "======"
-              echo ""
-            done
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "VCPKG_ROOT: $env:VCPKG_ROOT"
+          Write-Host "Installing vcpkg dependencies..."
+
+          & "$env:VCPKG_ROOT\vcpkg.exe" install `
+            --triplet x64-windows-static `
+            --x-install-root="$env:VCPKG_ROOT\installed"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "vcpkg installation failed! Showing logs..."
+            Get-ChildItem -Path "$env:VCPKG_ROOT\buildtrees" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue |
+              Select-Object -First 5 |
+              ForEach-Object {
+                Write-Host "====== $($_.FullName) ======"
+                Get-Content $_.FullName -Tail 100
+              }
             exit 1
-          fi
-        shell: bash
+          }
+
+          Write-Host "vcpkg dependencies installed successfully."
 
       - name: Build Rust library
+        shell: pwsh
+        env:
+          VCPKG_ROOT: C:\vcpkg
         run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "VCPKG_ROOT: $env:VCPKG_ROOT"
+          Write-Host "Building Rust library..."
+
           cargo build --release --features flutter --target x86_64-pc-windows-msvc
-        shell: bash
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Cargo build failed!"
+            exit 1
+          }
+
+          Write-Host "Rust library built successfully."
+
+          # List built files
+          Get-ChildItem -Path "target\x86_64-pc-windows-msvc\release" -Filter "*.dll" | ForEach-Object {
+            Write-Host "Built: $($_.Name)"
+          }
 
       - name: Build Flutter Windows
+        shell: pwsh
         run: |
-          cd flutter
+          $ErrorActionPreference = "Stop"
+
+          Set-Location flutter
+
+          Write-Host "Running flutter pub get..."
           flutter pub get
+
+          Write-Host "Building Flutter Windows app..."
           flutter build windows --release
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Flutter build failed!"
+            exit 1
+          }
+
+          $buildPath = "build\windows\x64\runner\Release"
+
+          if (Test-Path $buildPath) {
+            Write-Host "Build output:"
+            Get-ChildItem $buildPath
+          } else {
+            Write-Host "Warning: Build output directory not found at $buildPath"
+          }
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
