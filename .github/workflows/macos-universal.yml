@@ -1,4 +1,4 @@
-name: macOS Universal Build
+name: macOS Intel Build
 
 on:
   workflow_dispatch:
@@ -10,25 +10,9 @@ env:
   VERSION: "1.4.4"
 
 jobs:
-  build-macos:
-    name: Build ${{ matrix.job.arch }}
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - {
-              target: x86_64-apple-darwin,
-              os: macos-13,
-              arch: x86_64,
-              extra-build-args: "",
-            }
-          - {
-              target: aarch64-apple-darwin,
-              os: macos-14,
-              arch: aarch64,
-              extra-build-args: "--screencapturekit",
-            }
+  build-macos-intel:
+    name: Build Intel (x86_64)
+    runs-on: macos-13
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -59,18 +43,18 @@ jobs:
         shell: bash
         run: |
           cd "$(dirname "$(which flutter)")"
-          sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart || true
+          sed -i '' 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart || true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.MAC_RUST_VERSION }}
-          targets: ${{ matrix.job.target }}
+          targets: x86_64-apple-darwin
           components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: ${{ matrix.job.os }}
+          prefix-key: macos-13
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@v11
@@ -93,33 +77,23 @@ jobs:
             exit 1
           fi
 
-      - name: Set deployment target for aarch64
-        if: matrix.job.arch == 'aarch64'
+      - name: Update Podfile for Intel build
         run: |
-          MIN_MACOS_VERSION="12.3"
-          sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
-          sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
-          sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\"/" Cargo.toml
-          sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
-
-      - name: Update Podfile for universal build
-        run: |
-          sed -i -e "s/config.build_settings\['ARCHS'\] = 'arm64'/# Removed for universal build/" flutter/macos/Podfile
-          sed -i -e "s/config.build_settings\['ONLY_ACTIVE_ARCH'\] = 'YES'/# Removed for universal build/" flutter/macos/Podfile
+          sed -i '' "s/config.build_settings\['ARCHS'\] = 'arm64'/config.build_settings['ARCHS'] = 'x86_64'/" flutter/macos/Podfile
 
       - name: Build HekimRemote
         run: |
-          ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
+          ./build.py --flutter --hwcodec --unix-file-copy-paste
 
       - name: Create DMG
         run: |
           CREATE_DMG="$(command -v create-dmg)"
-          CREATE_DMG="$(readlink -f "$CREATE_DMG")"
-          sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
-          create-dmg --icon "HekimRemote.app" 200 190 --hide-extension "HekimRemote.app" --window-size 800 400 --app-drop-link 600 185 HekimRemote-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg ./flutter/build/macos/Build/Products/Release/HekimRemote.app
+          CREATE_DMG="$(greadlink -f "$CREATE_DMG" || readlink -f "$CREATE_DMG")"
+          sed -i '' 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG" || true
+          create-dmg --icon "HekimRemote.app" 200 190 --hide-extension "HekimRemote.app" --window-size 800 400 --app-drop-link 600 185 HekimRemote-${{ env.VERSION }}-x86_64.dmg ./flutter/build/macos/Build/Products/Release/HekimRemote.app
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HekimRemote-macOS-${{ matrix.job.arch }}
-          path: HekimRemote-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg
+          name: HekimRemote-macOS-Intel
+          path: HekimRemote-${{ env.VERSION }}-x86_64.dmg
