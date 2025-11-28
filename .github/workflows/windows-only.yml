@@ -117,6 +117,11 @@ jobs:
 
           Write-Host "Rust library built successfully."
 
+          # Copy dll to expected location for Flutter build
+          New-Item -ItemType Directory -Force -Path "target\release" | Out-Null
+          Copy-Item "target\x86_64-pc-windows-msvc\release\hekimremote.dll" "target\release\hekimremote.dll"
+          Write-Host "Copied hekimremote.dll to target\release\"
+
           # List built files
           Get-ChildItem -Path "target\x86_64-pc-windows-msvc\release" -Filter "*.dll" | ForEach-Object {
             Write-Host "Built: $($_.Name)"
